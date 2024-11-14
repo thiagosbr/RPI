@@ -1,40 +1,32 @@
 from flask import Flask, request, jsonify
-from werkzeug.utils import secure_filename
-import os
+import fitz  # PyMuPDF para manipular PDFs
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = './uploads'  # Pasta onde os arquivos serão salvos
-app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
 
-# Função para verificar se a extensão do arquivo é permitida
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
-# Endpoint para upload de arquivo PDF
+# Endpoint para upload e processamento do PDF
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Verifica se o arquivo foi enviado na requisição
-    # if 'file' not in request.files:
-    #     return jsonify({"error": "No file part in the request"}), 400
-    
-    file = request.files['file']
-    print(file)
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
 
-    
-    # Verifica se um arquivo foi selecionado
+    file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No file selected for uploading"}), 400
-    
-    # Verifica se o arquivo é um PDF
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        # Cria a pasta de upload se não existir
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        # Salva o arquivo
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        return jsonify({"message": "File successfully uploaded", "file_path": file_path}), 200
+
+    if file and file.filename.lower().endswith('.pdf'):
+        # Processa o PDF em memória
+        pdf_document = fitz.open("pdf", file.read())
+        pages_content = []
+        
+        # Extrai o texto de cada página e armazena no JSON
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            pages_content.append(page.get_text())
+
+        pdf_document.close()
+        
+        # Retorna o conteúdo das páginas em JSON
+        return jsonify({"pages": pages_content}), 200
     else:
         return jsonify({"error": "Allowed file type is PDF"}), 400
 
